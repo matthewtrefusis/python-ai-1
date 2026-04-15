@@ -3,6 +3,7 @@ import argparse
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from call_function import available_functions
 
 load_dotenv()
 
@@ -13,7 +14,18 @@ args = parser.parse_args()
 # Now we can access `args.user_prompt`
 
 model = "gemma-3-27b-it"
+# model = "gemini-2.5-flash"
 contents = args.user_prompt
+
+system_prompt = """
+You are a helpful AI coding agent.
+
+When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
+
+- List files and directories
+
+All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
+"""
 
 api_key = os.environ.get("GEMINI_API_KEY")
 
@@ -26,10 +38,19 @@ messages = [types.Content(role="user", parts=[types.Part(text=args.user_prompt)]
 
 response = client.models.generate_content(
         model=model, 
-        contents=messages)
-
+        contents=messages,
+        config=types.GenerateContentConfig(
+            tools=[available_functions],
+            system_instruction=system_prompt,
+            temperature=0
+            )
+        )
 if response.usage_metadata == None:
     raise RuntimeError("Failed API Request")
+
+if response.function_calls:
+    for function_call in response.function_calls:
+        print(f"Calling function: {function_call.name}({function_call.args})")
 
 prompt_tokens = response.usage_metadata.prompt_token_count
 candidate_tokens = response.usage_metadata.prompt_token_count
